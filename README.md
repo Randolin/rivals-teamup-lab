@@ -4,14 +4,15 @@ An unofficial, single-file team-composition sandbox for **Marvel Rivals Season 9
 Slot six heroes, see exactly which team-up loadouts go **Enhanced**, and brute-force
 the best comps — all in one HTML file with zero dependencies.
 
-**▶ Try it live:** `https://<your-username>.github.io/rivals-teamup-lab/` <!-- update after enabling GitHub Pages -->
+**▶ Try it live: [randolin.github.io/rivals-teamup-lab](https://randolin.github.io/rivals-teamup-lab/)**
 
-<!-- TODO: add screenshots
 ![Desktop board with avatars](docs/screenshot-desktop.png)
+
 With avatars (left) and without (right) — the tool is fully functional either way:
+
 ![Side by side](docs/screenshot-side-by-side.png)
+
 ![Mobile layout](docs/screenshot-mobile.png)
--->
 
 ## What it does
 
@@ -40,8 +41,9 @@ team-ups across 50+ heroes in your head is miserable. This tool doesn't make you
 ## Using it
 
 No build, no install, no network requirement beyond Google Fonts (which degrades
-gracefully offline). Either visit the live link above or download
-`rivals-teamup-lab.html` and open it in any modern browser (2023+).
+gracefully offline). Either use it at
+**[randolin.github.io/rivals-teamup-lab](https://randolin.github.io/rivals-teamup-lab/)**
+or download `index.html` and open it in any modern browser (2023+).
 
 ## Avatars (optional)
 

@@ -6,11 +6,15 @@ the best comps — all in one HTML file with zero dependencies.
 
 **▶ Try it live: [randolin.github.io/rivals-teamup-lab](https://randolin.github.io/rivals-teamup-lab/)**
 
+**The full board** — six slots, live team-up readout, roster intel, and the optimizer, with the avatar pack installed:
+
 ![Desktop board with avatars](docs/screenshot-desktop.png)
 
-With avatars (left) and without (right) — the tool is fully functional either way:
+**No avatars? No problem** — without the optional icon pack, heroes render as text tiles and every feature still works:
 
-![Side by side](docs/screenshot-side-by-side.png)
+![With and without avatars](docs/screenshot-side-by-side.png)
+
+**Mobile layout** — collapses to a single-column scroll with touch-sized controls:
 
 ![Mobile layout](docs/screenshot-mobile.png)
 
@@ -85,6 +89,15 @@ loadout is displayed at search time — what you see is what gets enforced.
 
 Bug reports, stale-data corrections, and feature ideas → GitHub Issues. The whole
 app is one commented HTML file; PRs are easy to review.
+
+## Built with AI
+
+In the spirit of transparency: this tool was "vibe-coded" — designed, iterated,
+debugged, and reviewed in collaboration with AI tools, with a human directing,
+testing, and shipping it. Judge the result on its merits: the entire app is one
+readable, commented HTML file with no build step, no trackers, no accounts, and
+no network calls beyond Google Fonts — auditable in a single sitting if you'd
+like to see for yourself.
 
 ## License & disclaimers
 

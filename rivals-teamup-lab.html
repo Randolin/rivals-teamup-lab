@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<!--
+  Team-Up Lab — a Marvel Rivals Season 9 team-composition sandbox.
+  Single self-contained HTML file: open it in any modern browser (2023+;
+  uses aspect-ratio and color-mix). The only external request is Google Fonts,
+  which degrades gracefully to system fonts offline.
+
+  Usage: click or drag heroes into the six slots; lock (🔒) heroes to keep
+  them (and their selected team-up) through "Find Teams" searches.
+  Team state is encoded in the URL hash, so links are shareable.
+
+  Data: team-up names and base/enhanced descriptions in RAW are synced to the
+  official Marvel Rivals site's Season 9 team-up pages — edit RAW to correct.
+  Keep double quotes out of names/descriptions or run them through esc().
+
+  Avatars (optional): drop images into ./avatars named after the in-game hero
+  name with spaces/ampersands collapsed to underscores, capitalization
+  preserved (The_Punisher, Jeff_the_Land_Shark, Cloak_Dagger). Three tiers:
+  Hero_Icon_<Name>.webp
+  (normal), Lord_Icon_<Name>.webp (enhanced team-up available but not the
+  active pick), Champion_Icon_<Name>_Animated.webp (enhanced AND activated).
+  All .webp (animated webp plays natively); missing tiers fall back downward,
+  then to a text name.
+  Bundled icons are NetEase Games / Marvel property, used non-commercially
+  for identification and removed immediately on request; the tool is fully
+  functional without them.
+
+  Fan-made tool. Not affiliated with NetEase Games or Marvel.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Marvel Rivals Season 9 team-up sandbox: slot six heroes, visualize enhanced team-ups, and brute-force the best comps.">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚛️</text></svg>">
+<title>Rivals S9 Team-Up Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0c1020; --panel:#141a30; --panel2:#1a2140; --ink:#e8ecfa; --dim:#8a93b4; --faint:#5b6383;
+  --line:rgba(140,150,200,.14);
+  --van:#f0a832; --duel:#ff5d5d; --strat:#3fd6b0;
+  --syn:#a78bfa; --syn-glow:rgba(167,139,250,.55);
+  --grant:#4da6ff;
+  --base:#6b7591;
+  --r:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:
+    radial-gradient(1100px 500px at 75% -10%, rgba(167,139,250,.10), transparent 60%),
+    radial-gradient(800px 400px at 10% 110%, rgba(63,214,176,.06), transparent 60%),
+    var(--bg);
+  color:var(--ink);
+  font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+h1,h2,h3{font-family:"Chakra Petch",system-ui,sans-serif}
+button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--syn);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+.app{display:grid;grid-template-columns:270px 1fr 300px;gap:14px;max-width:1440px;margin:0 auto;padding:14px}
+@media(max-width:1100px){.app{grid-template-columns:240px 1fr}.sidebar{grid-column:1/-1}}
+@media(max-width:760px){.app{grid-template-columns:1fr}}
+
+header.top{grid-column:1/-1;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;padding:2px 4px}
+header.top h1{font-size:22px;letter-spacing:.06em;text-transform:uppercase}
+header.top h1 em{font-style:normal;color:var(--syn)}
+header.top .sub{color:var(--dim);font-size:13px}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px}
+.panel h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin-bottom:10px}
+
+/* ---------- roster ---------- */
+.rolehead{display:flex;align-items:center;gap:8px;width:100%;margin:12px 0 8px;padding:6px 4px;background:none;font-family:"Chakra Petch";font-size:14px;letter-spacing:.12em;text-transform:uppercase;text-align:left;cursor:pointer;user-select:none;border:none;border-top:1px solid color-mix(in srgb,currentColor 45%,transparent);border-bottom:1px solid color-mix(in srgb,currentColor 45%,transparent)}
+.rolehead:first-of-type{margin-top:0}
+.rolehead .arrow{display:inline-block;font-size:19px;line-height:1;transition:transform .15s;color:inherit}
+.rolehead .arrow.open{transform:rotate(90deg)}
+.rolehead:hover{filter:brightness(1.25)}
+.panel.roster{min-width:0;align-self:start}
+.panel.roster,.sidebar .panel{
+  position:sticky;top:14px;
+  max-height:calc(100vh - 96px);overflow-y:auto;scrollbar-gutter:stable;
+  scrollbar-width:thin;scrollbar-color:rgba(140,150,200,.3) transparent;
+}
+.panel.roster::-webkit-scrollbar,.sidebar .panel::-webkit-scrollbar{width:6px}
+.panel.roster::-webkit-scrollbar-track,.sidebar .panel::-webkit-scrollbar-track{background:transparent}
+.panel.roster::-webkit-scrollbar-thumb,.sidebar .panel::-webkit-scrollbar-thumb{background:rgba(140,150,200,.25);border-radius:3px}
+.panel.roster::-webkit-scrollbar-thumb:hover,.sidebar .panel::-webkit-scrollbar-thumb:hover{background:rgba(140,150,200,.5)}
+@media(max-width:760px){.panel.roster,.sidebar .panel{position:static;max-height:none;overflow-y:visible}}
+.legend{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:10.5px;color:var(--dim)}
+.legend span{display:flex;align-items:center;gap:5px}
+.legend i{width:11px;height:11px;border-radius:50%;display:inline-block;flex:none;box-sizing:border-box}
+.rhelp{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.rhelp .note{font-size:11px;color:var(--faint);line-height:1.5;margin-top:7px}
+.rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:6px;margin-bottom:4px}
+.htile{
+  position:relative;border:1px solid var(--line);border-radius:8px;background:var(--panel2);
+  aspect-ratio:1/1;padding:6px 4px 4px;cursor:pointer;transition:transform .08s,border-color .12s;
+  overflow:hidden;display:flex;align-items:center;justify-content:center;
+}
+.htile::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:var(--rc)}
+.hname,.pname{
+  font-family:"Barlow Condensed";font-weight:700;font-size:11px;line-height:1.15;letter-spacing:.03em;
+  text-transform:uppercase;text-align:center;color:var(--rc);
+}
+.pname{color:var(--pc);font-size:10.5px}
+.avi{display:none;background:rgba(8,11,22,.55);border-radius:7px;object-fit:contain}
+.avi.ok{display:block;position:absolute;inset:7px 5px 5px;width:calc(100% - 10px);height:calc(100% - 12px)}
+.avi.ok~.hname,.avi.ok~.pname{display:none}
+.htile:hover{transform:translateY(-2px);border-color:var(--rc)}
+.htile.slotted{opacity:.32;filter:saturate(.4)}
+.htile.slotted:hover{transform:none}
+.htile.gain{border-color:var(--syn);box-shadow:0 0 0 1px var(--syn),0 0 10px rgba(167,139,250,.35)}
+.htile.grant:not(.gain){border-color:var(--grant);box-shadow:0 0 0 1px var(--grant),0 0 10px rgba(77,166,255,.32)}
+.htile.grantalt:not(.gain){border-color:rgba(77,166,255,.65);border-style:dashed;border-width:2px}
+.hdots{position:absolute;top:5px;right:5px;display:flex;flex-direction:column;gap:4px;z-index:1}
+.hdot{width:11px;height:11px;border-radius:50%;box-sizing:border-box}
+.hdot.g{background:var(--syn);box-shadow:0 0 0 2px rgba(10,13,26,.9),0 0 7px var(--syn-glow)}
+.hdot.b{background:var(--grant);box-shadow:0 0 0 2px rgba(10,13,26,.9),0 0 7px rgba(77,166,255,.65)}
+.hdot.r{background:rgba(10,13,26,.55);border:2.5px solid var(--grant);box-shadow:0 0 0 2px rgba(10,13,26,.9),0 0 6px rgba(77,166,255,.5)}
+
+/* ---------- board ---------- */
+.board{display:flex;flex-direction:column;gap:14px;min-width:0}
+.scorebar{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.scorebar .big{font-family:"Chakra Petch";font-weight:700;font-size:26px;letter-spacing:.03em}
+.scorebar .big b{color:var(--syn)}
+.scorebar .clear{margin-left:auto}
+button{
+  font:inherit;color:var(--ink);background:var(--panel2);border:1px solid var(--line);
+  border-radius:8px;padding:6px 12px;cursor:pointer;transition:border-color .12s,background .12s;
+}
+button:hover{border-color:var(--syn)}
+button.primary{background:linear-gradient(135deg,#7c5cd6,#5b3fb8);border-color:#8a6ce0;font-family:"Chakra Petch";letter-spacing:.05em}
+button.primary:hover{filter:brightness(1.12)}
+button:disabled{opacity:.45;cursor:default}
+
+.slotwrap{position:relative}
+svg.links{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0}
+svg.links line{stroke:var(--syn);stroke-width:2;opacity:.75;filter:drop-shadow(0 0 5px var(--syn-glow))}
+.slots{position:relative;z-index:1;display:grid;grid-template-columns:repeat(3,1fr);gap:22px 12px;padding-top:10px}
+@media(max-width:520px){.slots{grid-template-columns:repeat(2,1fr)}}
+.slot{
+  position:relative;min-width:0;border:1.5px dashed var(--line);border-radius:var(--r);aspect-ratio:4/3;min-height:110px;background:rgba(255,255,255,.015);
+  display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:12px;
+}
+.slot.filled{border-style:solid;background:var(--panel);align-items:stretch;justify-content:stretch;padding:0}
+.slot.filled.enh{border-color:var(--syn);box-shadow:0 0 0 1px var(--syn),0 0 16px var(--syn-glow)}
+.slotname{
+  position:absolute;top:-9px;left:8px;z-index:2;
+  font-family:"Barlow Condensed";font-weight:700;font-size:12px;line-height:16px;letter-spacing:.03em;color:var(--rc);
+  background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:0 8px;
+  white-space:nowrap;max-width:calc(100% - 16px);overflow:hidden;text-overflow:ellipsis;
+}
+.slot.filled.enh .slotname{border-color:var(--syn)}
+.avi.havi.ok{
+  position:absolute;inset:auto;top:-12px;left:8px;width:57px;height:57px;z-index:2;
+  border:1px solid var(--line);border-radius:11px;background:rgba(8,11,22,.85);
+}
+.avi.havi.ok+.slotname{display:none}
+.avi.havi.ok~.scard .head{padding-left:74px}
+.slot.filled.enh .avi.havi.ok{border-color:var(--syn);box-shadow:0 0 0 1px var(--syn),0 0 10px var(--syn-glow)}
+.scard{display:flex;flex-direction:column;width:100%;height:100%;border-radius:calc(var(--r) - 2px);overflow:hidden}
+.scard .head{
+  height:31px;display:flex;align-items:center;gap:6px;padding:0 8px;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--rc) 20%,transparent),transparent);
+}
+.scard .head .role{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--rc);line-height:1.6}
+.scard .head .btns{margin-left:auto;display:flex;gap:3px}
+.scard .head button{width:27px;height:24px;padding:0;font-size:13px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.scard .head button.lock.on{border-color:var(--van);color:var(--van)}
+.slot.dragover{border-color:var(--syn);background:rgba(167,139,250,.08)}
+.partners{display:flex;gap:10px;justify-content:center;align-items:center;flex:1;padding:6px 10px 10px;min-height:0}
+.partners .tbd{color:var(--faint);font-size:10.5px;text-align:center;line-height:1.5}
+.ptile{
+  position:relative;flex:0 1 auto;width:calc(50% - 5px);max-width:104px;max-height:104px;aspect-ratio:1/1;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  padding:5px 2px 2px;text-align:center;cursor:pointer;
+  border:1px solid var(--line);border-radius:9px;background:#10152a;opacity:.72;
+  transition:border-color .12s,background .12s,opacity .12s,transform .08s;overflow:hidden;
+}
+.ptile::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:var(--pc)}
+.ptile:hover{opacity:1;transform:translateY(-1px);border-color:var(--pc)}
+.ptile.eq{
+  opacity:1;background:color-mix(in srgb,var(--pc) 15%,var(--panel2));
+  border-color:color-mix(in srgb,var(--pc) 70%,transparent);
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--pc) 55%,transparent);
+}
+.ptile.eq .pname{color:var(--ink)}
+.pindot{position:absolute;top:8px;right:9px;width:8px;height:8px;border-radius:50%;box-sizing:border-box}
+.pindot.full{background:var(--syn);box-shadow:0 0 5px var(--syn-glow)}
+.pindot.ring{background:transparent;border:2px solid var(--syn);box-shadow:0 0 4px rgba(167,139,250,.4)}
+
+/* readout */
+.readout .item{padding:8px 2px;border-top:1px solid var(--line)}
+.readout .item:first-child{border-top:none}
+.readout .l1{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.readout .l1 .hn{font-family:"Barlow Condensed";font-weight:700;font-size:15px;color:var(--rc)}
+.readout .l1 .tn{font-weight:600}
+.readout .l1 .pn{color:var(--faint);font-size:12px}
+.readout .l1 .badge{margin-left:auto;font-family:"Chakra Petch";font-size:10px;letter-spacing:.12em;padding:2px 8px;border-radius:20px}
+.readout .badge.enh{background:rgba(167,139,250,.18);color:var(--syn);border:1px solid rgba(167,139,250,.4)}
+.readout .badge.base{background:rgba(107,117,145,.15);color:var(--base);border:1px solid rgba(107,117,145,.35)}
+.readout .desc{font-size:12.5px;color:var(--dim);margin-top:3px}
+.readout .desc b{color:var(--syn);font-weight:600}
+.readout .empty{color:var(--faint);font-size:13px;padding:6px 2px}
+
+/* ---------- sidebar ---------- */
+.sidebar{display:flex;flex-direction:column;gap:14px;min-width:0}
+.presets{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.preset{position:relative;padding:9px 2px;text-align:center;font-family:"Chakra Petch";font-weight:600;letter-spacing:.04em;font-size:13px}
+.preset .max{position:absolute;top:-6px;right:-4px;background:var(--syn);color:#171130;font-size:10px;font-weight:700;border-radius:10px;padding:0 6px;line-height:16px}
+.preset.sel{border-color:var(--syn);background:rgba(167,139,250,.1)}
+.steppers{display:flex;gap:6px;margin-top:8px}
+.step{flex:1;text-align:center;border:1px solid var(--line);border-radius:8px;padding:4px;background:var(--panel2)}
+.step label{font-size:9px;letter-spacing:.1em;text-transform:uppercase;display:block}
+.step .val{font-family:"Chakra Petch";font-size:17px;font-weight:700}
+.step .pm{display:flex;justify-content:center;gap:8px}
+.step .pm button{padding:0 7px;font-size:13px;line-height:1.5;border-radius:6px}
+.sv label{color:var(--van)} .sd label{color:var(--duel)} .ss label{color:var(--strat)}
+.findrow{display:flex;gap:6px;margin-top:10px}
+.findrow button{flex:1}
+.lockinfo{font-size:11.5px;color:var(--dim);margin-top:8px;line-height:1.5;overflow-wrap:break-word}
+.lockinfo .warn{color:var(--van)}
+.lockinfo:empty{display:none}
+.preset:disabled{opacity:.3;cursor:default}
+.preset:disabled:hover{border-color:var(--line)}
+.status{font-size:11.5px;color:var(--duel);margin-top:6px;overflow-wrap:break-word}
+.status:empty{display:none}
+.results .res{position:relative;display:block;width:100%;text-align:left;border:1px solid var(--line);border-radius:8px;padding:7px 8px;margin-top:7px;cursor:pointer;background:var(--panel2);transition:border-color .12s}
+.results .res:hover{border-color:var(--syn)}
+.results .res .sc{font-family:"Chakra Petch";font-weight:700;color:var(--syn);font-size:13px}
+.results .res .team{display:block;font-size:11.5px;color:var(--dim);line-height:1.5;margin-top:2px}
+.results .res .team i{font-style:normal}
+.results .res .team i.v{color:var(--van)} .results .res .team i.d{color:var(--duel)} .results .res .team i.s{color:var(--strat)}
+.pips{display:flex;justify-content:center;gap:9px;margin-top:10px}
+.pip{width:12px;height:12px;padding:0;border-radius:50%;background:transparent;border:2px solid var(--faint);box-sizing:border-box}
+.pip:hover{border-color:var(--syn)}
+.pip.on{background:var(--syn);border-color:var(--syn);box-shadow:0 0 6px var(--syn-glow)}
+.note{font-size:11px;color:var(--faint);line-height:1.5;overflow-wrap:break-word}
+.note b{color:var(--dim)}
+/* MOBILE OVERRIDES — kept last in the stylesheet: several selectors here tie on
+   specificity with base rules above, and later-in-source must win. */
+@media(max-width:760px){
+  /* slot-card portraits ~10% smaller to avoid overlap */
+  .avi.havi.ok{width:51px;height:51px}
+  .avi.havi.ok~.scard .head{padding-left:60px}
+  .ptile{width:calc(45% - 4px);max-width:94px;max-height:94px}
+  /* head bar: role text off (color already implies it); bigger square lock/remove */
+  .scard .head .role{display:none}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1>Team-Up <em>Lab</em></h1>
+    <span class="sub">Marvel Rivals · Season 9</span>
+  </header>
+
+  <section class="panel roster" id="roster">
+    <div id="rosterBody"></div>
+  </section>
+
+  <section class="board">
+    <div class="panel">
+      <div class="scorebar">
+        <span class="big"><b id="enhCount">0</b>/<span id="slotCount">0</span> ENHANCED</span>
+        <button class="clear" id="clearBtn">Clear Team</button>
+      </div>
+      <div class="slotwrap" style="margin-top:12px">
+        <svg class="links" id="linkSvg" aria-hidden="true"></svg>
+        <div class="slots" id="slots"></div>
+      </div>
+    </div>
+    <div class="panel readout">
+      <h2>Equipped team-ups</h2>
+      <div id="readout"><div class="empty">Slot heroes to see their team-up loadouts. Each hero card shows its two partners as icon buttons — click one to equip that loadout (click again to return to auto). Auto equips whichever loadout has its partner on the team.</div></div>
+    </div>
+  </section>
+
+  <aside class="sidebar">
+    <div class="panel">
+      <h2>Quick comps · V-D-S</h2>
+      <div class="presets" id="presets"></div>
+      <div class="steppers">
+        <div class="step sv"><label>Vanguard</label><div class="val" id="cv">2</div><div class="pm"><button data-k="v" data-d="-1">−</button><button data-k="v" data-d="1">+</button></div></div>
+        <div class="step sd"><label>Duelist</label><div class="val" id="cd">2</div><div class="pm"><button data-k="d" data-d="-1">−</button><button data-k="d" data-d="1">+</button></div></div>
+        <div class="step ss"><label>Strategist</label><div class="val" id="cs">2</div><div class="pm"><button data-k="s" data-d="-1">−</button><button data-k="s" data-d="1">+</button></div></div>
+      </div>
+      <div class="findrow">
+        <button class="primary" id="findBtn">Find Teams</button>
+        <button id="scanBtn" title="Compute the best possible enhanced count for every preset">Scan Presets</button>
+      </div>
+      <div class="lockinfo" id="lockInfo"></div>
+      <div class="status" id="status"></div>
+      <div class="results" id="results"></div>
+    </div>
+  </aside>
+</div>
+<script>
+/* ================= DATA ================= */
+const V="Vanguard",D="Duelist",S="Strategist";
+// [name, role, [tuName, partner, baseDesc, enhDesc] x2]
+const RAW=[
+["Angela",V,[["Asgardians of the Galaxy","Star-Lord","Activation grants Reveal within a targeted area. Activating the ability again performs a slam attack; enemies hit by the slam are Grounded.","When teaming up with Star-Lord, Angela gains Bonus Health scaling with the number of enemies struck by the slam."],["Odin's Unacknowledged","Loki","Project an Illusion forward. The illusion utilizes Assassin's Charge to thrust at enemies. Enemies struck head-on will be carried through the air for a short while.","When teaming up with Loki, the ability gains two charges."]]],
+["Hulk",V,[["Gamma Fastball","Wolverine","Enter a Furious state upon activation, gaining Speed Boost and Attack Speed for a duration. Also unlocks the Dances With Werewolves ability, granting Unstoppable for a period when Health drops to a certain threshold.","When teaming up with Wolverine, unlocks the Fastball Special. Upon mutual confirmation, Hulk hurls Wolverine forward."],["Savage Slam","Captain America","Leap high and smash the ground, dealing damage to enemies and reducing the cooldowns of other abilities based on remaining Health.","When teaming up with Captain America, the ground slam additionally applies Vulnerability to enemies hit."]]],
+["Captain America",V,[["Stars Aligned","Winter Soldier","Captain America can leap directly to a teammate, providing Bonus Health to both himself and the ally, while redirecting a portion of their incoming damage to himself.","When teaming up with Winter Soldier, the duo can trigger a mutual rally. Upon confirmation, they charge at one another, slamming together to grant Bonus Health and Movement Speed to all nearby friends. The original effect remains, now additionally granting a Speed Boost to the targeted teammate."],["Voltaic Union","Thor","Modifies Sentinel Strike into a Lightning Shield projectile. After landing two hits, Captain America launches the piercing Lightning Shield four times.","When teaming up with Thor, the lightning energy imbued in the shield intensifies. Each hit from the Lightning Shield triggers an extra burst of damage in the surrounding area."]]],
+["Devil Dinosaur",V,[["Primal Punishment","The Punisher","Adds a new ability. Upon activation, Primal Bite is replaced. Devil Dinosaur gains 2 magnetic cannons that can be fired forward; the cannonballs detonate when hitting enemies or the environment.","When teaming up with The Punisher, the duo can request an interaction. Once accepted, The Punisher rides atop Devil Dinosaur, restricting him to only Adjudication/Deliverance and Scourge Grenade while disabling other abilities. While mounted, The Punisher gains Damage Reduction; Devil Dinosaur absorbs a portion of all damage inflicted on The Punisher."],["Surf & Turf","Jeff the Land Shark","Impact Beam is replaced by a frontal water spray. This stream damages enemies while providing healing to teammates.","When teaming up with Jeff the Land Shark, Jeff can ride atop Devil Dinosaur's head. While riding, both gain some Damage Reduction and are swirled in therapeutic waters, receiving Continuous Healing. Jeff can only cast Joyful Splash, Aqua Burst, and Healing Bubble during this time."]]],
+["Doctor Strange",V,[["Gamma Maelstrom","Hulk","Upgrade Maelstrom of Madness to Gamma Maelstrom. This drastically boosts energy charge rates and removes the Anti-Heal curse.","When teaming up with Hulk, releasing Gamma Maelstrom retains some energy, and stored Gamma energy doesn't decay over time."],["Psionic Vortex","Invisible Woman","Upgrade Maelstrom of Madness to Psionic Vortex. Enemies caught in it are Launched toward you. Shield of the Seraphim also gains increased shield value.","When teaming up with Invisible Woman, any damage dealt by Psionic Vortex provides proportional Bonus Health for Doctor Strange."]]],
+["Emma Frost",V,[["Iced Out Diamond","Luna Snow","Emma Frost releases winter energy forward, dealing damage and Slow to enemies. She can also enhance her diamond form, condensing frost in front of her to form Zero Diamond that blocks enemy attacks and movement.","When Emma Frost teams up with Luna Snow, after activating Diamond Form, all ability damage applies Slow, and Soul Wave also applies Slow."],["Spirit Breaker","Mantis","Deals damage to the summoned Soul Crystal, which can be converted into Bonus Health for yourself.","When Emma Frost teams up with Mantis, shattering the Soul Crystal grants a one-time Bonus Health and reduces the cooldown of Mind Control."]]],
+["Groot",V,[["Wild Wall","Mantis","Summon a Wild Wall that provides Continuous Healing and Bonus Health to allies within its range.","When teaming up with Mantis, the Wild Wall evolves after providing a certain amount of healing, increasing its healing."],["Bubble Buddies","Jeff the Land Shark","Retreat inside a Bubble Shield to enter an Invincible state, granting self-targeted Continuous Healing.","When teaming up with Jeff the Land Shark, the healing effect inside the bubble is enhanced, and any excess healing converts into Bonus Health."]]],
+["Magneto",V,[["Magnetic Resonance","Emma Frost","Cast a magnetic projection that mimics Magneto's movement and ability casts perfectly from the enemy's perspective.","When teaming up with Emma Frost, the magnetic projection receives a massive Health bump and will persist indefinitely unless destroyed or manually recalled."],["Metallic Chaos","Scarlet Witch","Summons a Chaos Greatsword that deals damage to enemies in front.","When teaming up with Scarlet Witch, Magnetic Cannon becomes a charged ability. Charging consumes passive energy, and each energy segment consumed fires a Chaos Greatsword that deals damage to enemies."]]],
+["Peni Parker",V,[["Vibranium Mech","Black Panther","Upon activation, briefly grants Cyber-Web Cluster an Attack Speed and Damage Boost.","When teaming up with Black Panther, activating the ability deploys a frontal Vibranium Shield, while reducing the Vibranium Energy cost of Cyber-Web Cluster."],["Rocket Network","Rocket Raccoon","Deploy an Armored Spider-Nest that periodically drops Spider-Drones and Armor Packs that grant Bonus Health.","When teaming up with Rocket Raccoon, the Armored Spider-Nest passively regenerates its own Health. Furthermore, Rocket's B.R.B. will generate Cyber-Webs, and spawn both Spider-Drones and Arachno-Mines."]]],
+["Rogue",V,[["Explosive Entanglement","Magneto","Defensive Stance is fortified. Activating the ability expands a magnetic field, drastically boosting the Damage Reduction ratio of Defensive Stance. Furthermore, all damage absorbed by the field is converted directly into damage for Southern Brawl.","When teaming up with Magneto, Southern Brawl Knocks back enemies. Extra damage is dealt if they're propelled into a wall."],["Mr. & Mrs. X","Gambit","After activation, every attack triggers a kinetic explosion, dealing area damage to surrounding enemies while simultaneously healing nearby allies.","When teaming up with Gambit, Rogue remains permanently locked in the \"Hearts as One\" state."]]],
+["The Thing",V,[["Two in One","Human Torch","Enter an enhanced state upon activation. For the duration, The Thing's fists are violently engulfed in flames. Every Rocky Jab deals splash damage, and every Stone Haymaker creates an explosion, dealing damage in a frontal cone.","When teaming up with Human Torch, Human Torch can lift The Thing into the air and slam him down, dealing damage and Stun to enemies. The Thing then automatically enters his flaming enhanced state upon landing."],["Unbreakable Forces","Invisible Woman","Generate a layer of Psionic Armor upon activation, granting Bonus Health scaling off currently missing Health.","When teaming up with Invisible Woman, the Psionic Armor is fortified. While active, every time The Thing takes a set amount of damage, the armor pulses out a wave of area healing for allies. Furthermore, the conversion ratio for missing Health into Bonus Health is increased."]]],
+["Thor",V,[["Ragnarok Rebirth","Hela","Receiving fatal damage prevents immediate defeat; Thor gains a decaying pool of Bonus Health. If he participates in a KO during this time, he resurrects and recovers a small amount of Health.","When teaming up with Hela, if either of them participates in a KO, Thor instantly revives, restoring Health equal to his remaining Bonus Health and gaining a Continuous Healing effect."],["Divine Armory","Angela","Hurl a Thunder Spear that restores Thorforce for each enemy struck. Afterward, Thor can leap to the spear's explosion point, dealing a second wave of damage to all enemies within range.","When teaming up with Angela, leaping to the Thunder Spear grants Bonus Health."]]],
+["Venom",V,[["Blood Leech","Blade","Cellular Corrosion new effect: while tethered to enemies, continuously siphon health from every linked target, restoring Venom's Health.","When teaming up with Blade, Venom gains a burst of one-time healing when using certain specific abilities."],["Abyssal Flames","Phoenix","Ignites the symbiote with Phoenix Flames for a duration, replacing Dark Predation with a sweeping Phoenix Touch frontal slash.","When teaming up with Phoenix, Venom's Phoenix Force is enhanced: every Phoenix Touch applies Sparks. Upon reaching three stacks, the Sparks detonate."]]],
+["Deadpool",V,[["Gumbo Chimichangas","Gambit","Activate for kinetic energy, propelling Deadpool in a forward leap. Upon landing, he scatters a ring of kinetically charged chimichangas that deal damage to enemies.","When teaming up with Gambit, the kinetic energy causes Deadpool's landing to inflict a Stun effect on enemies in the blast radius."],["\"Hel-Yeah, Honey\"","Hela","Receive upgrades from Hel, allowing the Desert Eagles or Katanas to be upgraded one additional time. Hel-Yeah Desert Eagles: Duelist and Vanguard gain pierce, and the thought bubbles transform into homing death-rattle bubbles. Strategist death-rattle bubbles also home in on allies, exploding to provide healing. Hel-Yeah Katanas: Every strike injects undead energy into the enemy. Hitting an enemy three times with the Katanas detonates the energy, dealing percentage-based true damage scaling off their max Health.","When teaming up with Hela, BOTH the Desert Eagles and Katanas can be upgraded one extra time."]]],
+["The Hood",V,[]],
+["Black Cat",D,[["Binding Ties","Spider-Man","Turn of Fortune is replaced by Spider-Web Grapple, which has 2 charges. Landing the grapple on an enemy steals Fortune and applies a Spider-Tracer. If Black Cat hits an enemy carrying a Spider-Tracer with any other ability, she triggers the mark to deal bonus damage.","When teaming up with Spider-Man, using Spider-Web Grapple to hit an enemy already marked with a Spider-Tracer temporarily Immobilizes them in place."],["Feline Alliance","Black Panther","Taking damage accumulates Vibranium Energy. Upon reaching a specific threshold, Black Cat can unleash a violent explosion, damaging and Knocking back surrounding enemies while gaining a brief Speed Boost and Bonus Health.","When teaming up with Black Panther, this explosion is no longer restricted by the energy threshold and can be triggered at any time."]]],
+["Black Panther",D,[["Dimensional Shortcut","Magik","Activate a Limbo stepping disc to instantly return to your position from a few seconds ago, gaining Bonus Health in the process. When the teleport ends, the disc collapses in an explosion, damaging nearby enemies and applying Vibranium Marks.","When teaming up with Magik, the teleportation sequence can be manually canceled mid-transit."],["Damisa-Yao","Storm","Triggers the elemental power within his armor, dealing damage and applying Slow to surrounding enemies while attaching Vibranium Marks.","When teaming up with Storm, enemies within range are launched toward Black Panther."]]],
+["Black Widow",D,[["Burning Bullets","Phoenix","Activation grants the Red Room Rifle a Fire Rate Boost. Additionally, the Plasma Cannon projectile becomes a hitscan laser that no longer requires charging.","When teaming up with Phoenix, her Plasma Cannon gains a second ability charge."],["Allied Agents","Hawkeye","Landing hits with Red Room Rifle builds Focus. At three stacks, enter a Focused state where the next bullet gains the Hunter's Sight effect, granting Damage Boost and pierce effects.","When teaming up with Hawkeye, landing a critical hit prevents the Focused state from expiring, allowing continuous enhanced fire until missing a crit."]]],
+["Blade",D,[["Bleed for Battle","Captain America","For every set amount of damage taken, Blade builds a stack of Bloodline Awakening.","When teaming up with Captain America, taking critical damage instantly triggers the Bloodline Awakening state, gaining bonus stacks while raising the overall stack cap."],["Blade of Khonshu","Moon Knight","Perform a heavy forward cleave with the Ancestral Sword while performing a short dash. At the end of the dash, swiftly slash four times, each strike sending a Darkmoon Blade forward. When a Darkmoon Blade hits an enemy, it bounces to nearby targets.","When teaming up with Moon Knight, each Whirlwind Slash triggered generates one additional Darkmoon Blade."]]],
+["Cyclops",D,[["Kinetic Kin","Gambit","Release stored kinetic energy to enter an enhanced state for a duration. While active, Cyclops gains significantly increased movement speed and jump height.","When teaming up with Gambit, during the enhanced state, the attack speeds for both Optic Blast and Concussive Beam are increased."],["Slim and Red","Phoenix","Hitting an enemy with Ricochet Force summons the Phoenix Force to ignite them, causing continuous burn damage over a set duration. Hitting an ignited target with Optic Blast or Concussive Beam instantly triggers a percentage of the remaining burn damage as a single burst.","When teaming up with Phoenix, Spark detonations reduce the cooldown of Ricochet Force."]]],
+["Daredevil",D,[["Comprehensive Defense","Iron Fist","Objection! is enhanced. Whirling billy clubs now damage all enemies in range while deflecting Projectiles from all directions. Successfully deflecting attacks recovers Fury.","When teaming up with Iron Fist, Daredevil passively recovers Health for the entire duration of the ability."],["Devilish Affair","Black Widow","Swings Devil's Chain in a criss-cross pattern, dealing damage to enemies in front and inflicting a Slow.","When teaming up with Black Widow, the damage radius is expanded, and landing hits recovers Fury."]]],
+["Elsa Bloodstone",D,[["Prehistoric Trap","Devil Dinosaur","After deploying the Smoky Snare trap, Diablo will monitor the area. If enemies approach, Diablo Immobilizes and Damages them. He also releases a lethal gas, causing continuous area damage.","When teaming up with Devil Dinosaur, Elsa can store and deploy two Smoky Snares."],["Loudmouth Mercs","Deadpool","Living Bullet changes to special rounds that Taunt targets with Deadpool's chatter, while Slowing, and damaging nearby enemies over time. After a timer, the bullet auto-recalls, healing Elsa based on the damage dealt while adding one extra gauge block to her Inherited Instinct passive cap.","When teaming up with Deadpool, Deadpool breaks the fourth wall, significantly boosting Instinct acquisition rate."]]],
+["Hawkeye",D,[["Moonlit Slash","Cloak & Dagger","Upgrade Crescent Slash to Moonlit Slash, projecting a radiant slash outward. It heals and boosts healing for allies, while damaging enemies and applying Vulnerability.","When teaming up with Cloak & Dagger, Moonlit Slash can be chained into a three-hit combo, firing off three consecutive sweeping light blades."],["Senbonzakura Strike","Psylocke","Upgrade Blast Arrow to Psionic Arrow. While drawn, Hawkeye can continuously bank extra Psionic Arrows. Releasing the bowstring rapidly fires all accumulated arrows forward in sequence.","When teaming up with Psylocke, the nocking speed for each Psionic Arrow is significantly quickened, and they explode upon hitting enemies or the environment."]]],
+["Hela",D,[["Deep Wrath","Namor","Whenever Hela participates in a KO, an Undead Monstro spawns at the fallen enemy's position. While an Undead Monstro is present, casting Piercing Night will command the Monstro to spit a Nightsword Thorn at the nearest enemy.","When teaming up with Namor, each attack during Goddess of Death spawns an Undead Monstro at the point of impact."],["Hel Tendrils","Venom","Replace Soul Drainer with Hel Tendrils. Upon hit, tendrils pull nearby enemies toward the impact point and link them, Slowing enemies that try to escape.","When teaming up with Venom, Piercing Night fires a dense volley of symbiote-infused Nightsword Thorns. Each direct Nightsword Thorn hit restores a portion of Hela's Health."]]],
+["Human Torch",D,[["Fiery Sparks","Jubilee","Passively detect enemies in the immediate vicinity and launch tracking Sparks to chip away their health.","When teaming up with Jubilee, successfully landing a Firework Spark on an enemy grants Human Torch Bonus Health."],["Storming Ignition","Storm","Unleash a storm-driven blaze of fire forward, generating a persistent Fire Vortex upon impact that continuously damages and pulls in enemies.","When teaming up with Storm, her Omega Hurricane ignites into a Burning Hurricane if it crosses a Flame Tornado. Furthermore, any Omega Hurricane, Jeff-Nado, or Flame Tornado that sweeps across a Flame Field left by Human Torch will instantly generate a new Flame Tornado."]]],
+["Iron Fist",D,[["Kumiho Palm","White Fox","Hitting an enemy with Yat Jee Chung Kuen provides a burst of healing to nearby allies.","When teaming up with White Fox, the lock-on distance for Yat Jee Chung Kuen is significantly increased."],["Iron & Stone","The Thing","Unleash a powerful uppercut to Launch Up enemies.","When teaming up with The Thing, unleashing the uppercut can be chained directly into a sweeping leg sweep for a follow-up attack."]]],
+["Iron Man",D,[["Gamma Charge","Hulk","Upgrade Armor Overdrive to Gamma Overdrive. In this state, Iron Man gains a Gamma Shield and can fire significantly stronger Repulsor Blasts and Unibeams.","When teaming up with Hulk, releasing Invincible Pulse Cannon generates a Gamma Shield and heavily infuses the blast, creating a Gamma Pulse Cannon. Its radiation creates a massive damage increase while the projectile flies."],["Thunder Overdrive","Thor","Enhance Unibeam both in and out of Armor Overdrive. When fired, a ring of volatile lightning energy forms, dealing bonus damage to enemies caught near the beam's edge.","When teaming up with Thor, Armor Overdrive cooldown is massively reduced."]]],
+["Magik",D,[["Void Pentagram","The Hood","Casting Stepping Discs within a Hellish Magic Circle refunds energy, and each use of Stepping Discs summons a Limbo Demon.","When teaming up with The Hood, the summoned Limbo Demons have heavily increased Health and a wider attack range."],["Chain of Cyttorak","Doctor Strange","Chain of Cyttorak can tether two enemies simultaneously, dragging both targets to the same location.","When teaming up with Doctor Strange, Chain of Cyttorak can tether multiple enemies at once, pulling the entire group to a singular point."]]],
+["Mister Fantastic",D,[["Fantastic Amplifier","Rocket Raccoon","Equips the Fantastic Amplifier. For the duration, Mister Fantastic's maximum Elasticity is increased, and he can actively enter Inflation State.","When teaming up with Rocket Raccoon, Brainiac Bounce Launches hit enemies."],["Clobberin' Research Dept.","The Thing","In brawler stance, Stretch Punch becomes a charged ability, firing a forward Brawling Punch. Hitting an enemy grants Bonus Health scaling with damage, and a full charge Launches hit enemies.","When teaming up with The Thing, while in the brawling stance, Distended Grip also becomes a charged ability, slamming down a Distended Hammer. Hitting enemies grants Bonus Health based on damage, and Launches enemies at full charge."]]],
+["Moon Knight",D,[["Luminous Moon","Cloak & Dagger","Enter Phased state and dash forward. Upon concluding, emit a Light Energy Healing Wave that heals Moon Knight and nearby allies.","When teaming up with Cloak & Dagger, the Phased state duration is extended, the dash distance increases, and the Light Energy Healing Wave boasts a larger radius and stronger healing output."],["Blood Moon","Elsa Bloodstone","Deploy an Ankh Trap. Upon triggering, an Ankh materializes at the location, while summoning a single Talon of Khonshu to Launch enemies toward the trap's center.","When teaming up with Elsa Bloodstone, triggering the trap summons multiple Talons of Khonshu to bombard the area."]]],
+["Namor",D,[["Chilling Charisma","Luna Snow","Gain a new ability to summon a Frost Tide forward. The wave damages, Pushes Back, and inflicts a Slow on all enemies hit.","When teaming up with Luna Snow, the Frost Tide gains 1 charge and crashes down upon reaching its maximum range, dealing area damage and Slowing enemies caught near the endpoint."],["Gamma Monstro","Hulk","Summon an extra Gamma Monstro that continuously damages the nearest enemy. Upon landing critical hits, the Gamma Monstro gains increased Attack Speed. Hitting an enemy with Wrath of the Seven Seas prompts it to fire a powerful beam.","When teaming up with Hulk, casting Blessing of the Deep creates a water barrier infused with Gamma energy. Standing inside accelerates the Gamma Monstro cooldown and grants it a Damage Boost."]]],
+["Phoenix",D,[["Circle of Life","Hela","Psionic Detonation is replaced by Phoenix Netherfire, applying a Telekinetic Mark to the targeted location. Upon hitting, it triggers an initial small explosion that briefly Stuns enemies, followed by two larger explosions that apply a Healing Reduction effect. Every single blast inflicts Sparks onto the enemies.","When teaming up with Hela, every blast in the sequence applies multiple stacks of Sparks to enemies caught within."],["Telekinetic Beatdown","Rogue","Fire a telekinetic shockwave forward. If it lands, the Phoenix Force rushes the enemy and delivers a powerful punch. If there are other targets nearby, the Phoenix Force rapidly blinks between them to strike them as well, inflicting Sparks on each victim while healing Phoenix.","When teaming up with Rogue, the width of the telekinetic shockwave expands, and the Phoenix Force's target detection range is increased."]]],
+["Psylocke",D,[["Light & Dark Darts","Cloak & Dagger","Unleash a ring of Light Darts in all directions that damage enemies and restore Psylocke's Health upon impact, leaving behind a Shadow Domain. Staying inside the domain for a short time will re-enter Stealth.","When teaming up with Cloak & Dagger, the radius of the Shadow Domain expands, and each time re-entering Stealth, the Light Darts are fired in all directions again."],["Mental Projection","Emma Frost","Create an illusory projection that automatically dashes forward to use Psi-Blade Dash, while Psylocke enters Stealth. If Psylocke attacks, the illusion mimics her strikes.","When teaming up with Emma Frost, Psylocke's mental powers are elevated, allowing her to reactivate the ability to instantly swap places with her illusion."]]],
+["Scarlet Witch",D,[["Hex Fireworks","Jubilee","Infuse firework energy into the Dark Seal forcefield, turning it into a Plasmoid Seal, allowing for a secondary blast. After expanding the Plasmoid Seal, pressing the ability key again while it persists will detonate the fireworks, dealing damage and inflicting Vulnerability.","When teaming up with Jubilee, Scarlet Witch receives constant healing from the firework energy while using Mystic Projection."],["Sorcerers Supreme","Doctor Strange","Chthonian Burst is replaced with Mystic Burst upon activation. Hold down the attack button to unleash a rapid, relentless salvo of magical missiles in the target direction.","When teaming up with Doctor Strange, Scarlet Witch's maximum total Chaos Energy pool increases, and Chaos Control generates energy much faster when attacking."]]],
+["Spider-Man",D,[["Symbiote Bond","Venom","Venom shares a part of his symbiote with Spider-Man, activating their symbiote abilities. Spider-Man can convert the symbiotes into explosive spikes that inflict harm on nearby enemies and relentlessly drive them back.","When teaming up with Venom, this triggers additional Touch of Klyntar tendrils that continuously tether and damage enemies on top of the base effect."],["Parker Power-Up","Peni Parker","Peni Parker whips up a Sticky Spider-Bomb for Spider-Man! Prime it, then toss it before the timer's up for a blast that damages nearby enemies and attaches a Spider-Tracer to them. If not thrown in time, it explodes on Spider-Man, recharging all Web-Cluster shots.","When teaming up with Peni Parker, Spider-Tracers applied by Web-Cluster are upgraded. Detonating these upgraded marks generates Bonus Health for Spider-Man."]]],
+["Squirrel Girl",D,[["Squirrel Missile","Iron Man","Squirrel Girl gains the Squirrel Missile ability. She directs a squirrel to ride Iron Man's nanotech glove as a homing missile. Upon hit, the squirrel flees just before a fiery explosion.","When teaming up with Iron Man, using Squirrel Blockade simultaneously fires a Squirrel Missile."],["ESU Alumnus","Spider-Man","Spider-Man gives Squirrel Girl a web bomb. She can launch it to unleash an explosion upon contact with the environment or an enemy, briefly Slowing and damaging enemies caught in the blast.","When teaming up with Spider-Man, Squirrel Girl receives more Web Fluid. After throwing Webbed Acorn, viscous web fluid coats the ground alongside the explosion, leaving behind a sticky Web Area. Enemies within suffer a continuous Slow that scales into a Stun if they linger too long."]]],
+["Star-Lord",D,[["Flora Munitions","Groot","Gain a new ability to toss Twisted Thorn Seeds forward. Upon landing, they rapidly Sprout and take root, generating Thorn Snares around the area. Enemies stepping on a snare take damage and suffer a Root effect.","When teaming up with Groot, the number of Thorn Snares deployed increases, and the damage dealt when an enemy steps on them is boosted."],["Star-Soul","Adam Warlock","Gain a new ability to place a Telekinetic Beacon. You can teleport back to the location where the beacon is deployed from anywhere on the map. Upon defeat, Star-Lord will cocoon and respawn at the Telekinetic Beacon's coordinates.","When teaming up with Adam Warlock, every time Star-Lord participates in a KO, Telekinetic Beacon cooldown is reduced."]]],
+["Storm",D,[["God of Thunder","Thor","Upgrade Wind Blade into a hitscan beam that detonates upon striking a target.","When teaming up with Thor, Bolt Rush becomes Chain Lightning, allowing it to bounce from foe to foe."],["Jaws of Fate","Jeff the Land Shark","Unleash a torrential downpour that continuously heals both herself and her teammates.","When teaming up with Jeff the Land Shark, casting Omega Hurricane allows Jeff to swim inside the cyclone, generating a localized Jeff-nado."]]],
+["The Punisher",D,[["Bestial Hunt","Daredevil","Shoot piercing bullets that carry a Damage Boost effect.","When teaming up with Daredevil, the bullets break enemy summoned walls and shields more quickly."],["Ammo Overload","Rocket Raccoon","Throw an Ammo Overload Device in the target direction. Upon entering the device's range, receive Faster Firing.","When teaming up with Rocket Raccoon, the device grants Infinite Ammo."]]],
+["Winter Soldier",D,[["Expert Instinct","Elsa Bloodstone","Securing or participating in a KO grants a stack of Culling Instinct. Each stack reduces the cooldowns of Winter Soldier's other abilities. All stacks are lost upon defeat.","When teaming up with Elsa Bloodstone, the Bonus Health generated by Ceaseless Charge is increased."],["Timeless Veterans","The Punisher","Unlocks the Burst Spike ability. Using the bionic arm emits forward electricity, dealing damage and Knocking Back enemies.","When teaming up with The Punisher, the electric burst applies a Grounded effect and Knocks Back enemies even further."]]],
+["Wolverine",D,[["Pair of Threes","Gambit","Upon activation, Wolverine receives Kinetic Enhancement, gaining increased Movement Speed and a Jump Boost. Attacking enemies applies Kinetic Particles that detonate after a short delay for bonus damage. The effect lasts for a duration.","When teaming up with Gambit, Wolverine receives Continuous Healing for the entire duration of the ability."],["Blast Slash","Cyclops","Activation extends the attack range of Savage Claw and Berserk Claw Strike. Vicious Rampage is replaced with Kinetic Claws, granting a brief forward lunge that unleashes a flurry of slashes around.","When teaming up with Cyclops, Blast Slash is permanently active."]]],
+["Adam Warlock",S,[["Cosmic Cyclone","Storm","Teammates linked by Soul Bond receive a Speed Boost.","When teaming up with Storm, linked teammates additionally gain a Damage Boost."],["Flawless Design","Ultron","Cosmic Cluster now provides healing to allies.","When teaming up with Ultron, Cosmic Cluster creates an explosion upon impact."]]],
+["Cloak & Dagger",S,[["Frozen Haven","Luna Snow","Channel frost energy outward to encase yourself in an absolute block of ice. This offers great protection, but Freezes you in place. While frozen, you can be healed and emit a weak healing aura to nearby allies.","When teaming up with Luna Snow, the healing aura provided to allies while Frozen becomes significantly stronger."],["Oblivion Shroud","The Hood","Veil of Lightforce and Terror Cape are warped by hellfire energy, changing into Veil of Light and Veil of Darkness while retaining their original effects. After traveling a set distance, the veils halt in place. Enemy damage passing through the Veil of Light is weakened, while enemy healing passing through the Veil of Darkness suffers Healing Reduction.","When teaming up with The Hood, the width of both the Veil of Light and Veil of Darkness expands. Additionally, allies passing through the veils are empowered by hellfire energy, gaining Damage Boost for a duration."]]],
+["Gambit",S,[["Sparkling Staff","Jubilee","Twirl your firework-energy enhanced bo staff. The radiating firework sparks provide healing to nearby allies. Concurrently, the staff deals damage to close-range enemies, and the rapid spinning blocks incoming damage from most projectiles.","When teaming up with Jubilee, both Bayou Bash and Big Easy Impact gain an additional Continuous Healing aura."],["Favorable Odds","Magneto","Throw two magnetic playing cards forward. Upon hitting the environment or a character, the two cards magnetically repel and unfurl, spinning in place for a duration. They heal allies they hit, while damaging and Launching enemies.","When teaming up with Magneto, after the duration ends, the magnetic poles of the two cards reverse. They violently slam back together and explode, providing an extra burst of healing to allies and damage to enemies."]]],
+["Invisible Woman",S,[["United Siblings","Human Torch","Generate a Flame Shield for a targeted ally that blocks incoming damage while providing a Continuous Healing aura to everyone nearby. Projectiles from teammates shot through the Flame Shield receive a Damage Boost. Enemies that pass through the shield are Slowed.","When teaming up with Human Torch, the Flame Shield boasts a larger radius and heavily increased shield value."],["First Family","Mister Fantastic","Invisible Woman and surrounding allies enter Invisible state, gaining healing and a Speed Boost. The effect ends if they take damage or the duration expires. Disengaging from combat for a duration will reenter the Invisible state.","When teaming up with Mister Fantastic, the healing and Speed Boost effects are enhanced, and the Invisible state duration is increased."]]],
+["Jeff the Land Shark",S,[["Guardian of the Deep","Venom","Shoot out healing tendrils; linked allies receive Continuous Healing, and excess healing is converted into Bonus Health.","When teaming up with Venom, symbiote tendrils can also lash out at nearby enemies within range, inflicting continuous damage."],["Mr. Pool's Interdimensional Toy Box","Deadpool","Gain a new ability to spit out a Deadpool Plushie. The plushie continuously Taunts nearby enemies while spraying a healing mist onto surrounding allies.","When teaming up with Deadpool, the Deadpool Plushie asserts a much stronger Taunt while concurrently damaging enemies caught in its radius."]]],
+["Jubilee",S,[["Vampiric Kin","Blade","Deploy a Vampiric Field. Allies standing within the field gain Life Steal when attacking enemies.","When teaming up with Blade, allies inside the field receive an additional Continuous Healing effect."],["Hellfire Sparks","The Hood","When Attack Speed is enhanced, Energy Plasmoids transform into a hitscan attack that grants self-healing on hit and is capable of dealing critical hits.","When teaming up with The Hood, the Void Magic Mark is never cleared, allowing her to indefinitely sustain the hitscan attack form."]]],
+["Loki",S,[["Vibrant Vitality","Mantis","Empowers Regeneration Domain, expanding the rune field's radius from 5m to 6.5m and granting a Damage Boost to allies within the field.","When teaming up with Mantis, deploying Regeneration Domain additionally unleashes a one-time blast, damaging and Knocking Back all enemies within the field."],["Villain's Illusion","Hela","Gain a new ability to target fallen heroes (friend or foe), letting Loki assume their form for a set time (cannot cast their Ultimate Ability).","When teaming up with Hela, Loki's transformation lasts slightly longer. Furthermore, taking lethal damage while transformed or in his Ultimate Ability state will merely revert him back to Loki with a sliver of Health, preventing a KO."]]],
+["Luna Snow",S,[["Atlas Bond","White Fox","Unleash a spirit fox forward that Charms enemies while healing any allies in its path. Activating the ability instantly cleanses all negative status effects on Luna Snow.","When teaming up with White Fox, the spirit fox automatically returns after reaching its maximum distance, and the self-cleanse is retained."],["Duality Dance","Adam Warlock","Cast Soul Bond to tether all characters within range. Attacking tethered enemies or healing linked allies restores your Health.","When teaming up with Adam Warlock, scoring critical hits with Light & Dark Ice reduces the cooldowns of Absolute Zero and Ice Arts."]]],
+["Mantis",S,[["Vitality Pact","Adam Warlock","Upon defeat, Mantis can freely move as a soul, healing nearby allies, and reforge her body at a chosen spot. After using Natural Anger, the effect of Nature's Favor is enhanced, increasing the amount of healing provided.","When teaming up with Adam Warlock, her soul state can forge Soul Bond with nearby teammates, granting Healing Over Time and distributing damage taken across the bond."],["Star Blossom","Star-Lord","Recasting Healing Flower on a teammate with the effect enhances and spreads the healing aura.","When teaming up with Star-Lord, using Healing Flower on any teammate instantly triggers the enhanced Spell Field and healing effect."]]],
+["Rocket Raccoon",S,[["Planet X Pals","Groot","Converts Bombard Mode to launch Thorny Spores. Upon impact, they deal continuous damage to enemies within the radius while healing and granting Bonus Health to allies.","When teaming up with Groot, Rocket can ride on Groot's shoulders, and the active duration of the Thorny Spores field is extended."],["Mammalian Bond","Squirrel Girl","Tosses out a scattered batch of augmented Vitality Acorns. Acorns that hit the floor can be collected. Whether struck directly or picked up, teammates receive a burst of healing and global cooldown reduction.","When teaming up with Squirrel Girl, the maximum charge count for this ability is increased."]]],
+["Ultron",S,[["SP//DR Sync","Peni Parker","Apply Imperative: Patch to all allies.","When teaming up with Peni Parker, Imperative: Firewall applies to all Drones, allowing the ability effects to be triggered multiple times simultaneously."],["Stark Protocol","Iron Man","Upgrade Encephalo-Ray to Nano-Ray, firing multiple damaging nano-projectiles forward.","When teaming up with Iron Man, Imperative: Firewall fires powerful homing missiles at enemies in range, causing area damage."]]],
+["White Fox",S,[["Lucky Loan","Black Cat","White Fox receives an Orb of Life from Black Cat. Upon use, it recovers Spirit Tail energy and converts life energy into Nine-Tailed Aura that shoots out in all directions. This automatically tracks nearby allies and enemies, granting Speed and Healing to allies while damaging and Slowing enemies.","When teaming up with Black Cat, using the Orb triggers a state where Spirit Tail Energy is no longer consumed for a duration, allowing free use of Spectral Surge and Fox Form Awakening."],["Psionic Fox","Psylocke","Activating Fox Form Awakening no longer consumes Spirit Tail energy, and grants the maximum possible duration immediately upon use.","When teaming up with Psylocke, the cooldown for Fox Form Awakening is drastically reduced."]]],
+];
+
+/* ================= MODEL ================= */
+const ROLES=[V,D,S];
+const RC={[V]:"var(--van)",[D]:"var(--duel)",[S]:"var(--strat)"};
+// Deadpool plays all three roles with the same team-ups
+const dpTus=RAW.find(r=>r[0]==="Deadpool")[2];
+RAW.splice(RAW.findIndex(r=>r[0]==="Daredevil")+1,0,["Deadpool",D,dpTus]);
+RAW.splice(RAW.findIndex(r=>r[0]==="Cloak & Dagger")+1,0,["Deadpool",S,dpTus]);
+const H=RAW.map((r,i)=>({id:i,name:r[0],role:r[1],tus:r[2].map(t=>({name:t[0],partner:t[1],base:t[2],enh:t[3]}))}));
+const idsByName={}; H.forEach(h=>{(idsByName[h.name]=idsByName[h.name]||[]).push(h.id);});
+// partner bitmasks (54 heroes -> lo bits 0-31, hi bits 32+)
+function maskOf(id){return id<32?[1<<id>>>0,0]:[0,1<<(id-32)>>>0];}
+function maskOfName(n){let lo=0,hi=0;const ids=idsByName[n]||[];for(const id of ids){const m=maskOf(id);lo=(lo|m[0])>>>0;hi=(hi|m[1])>>>0;}if(!ids.length)console.warn("unknown partner",n);return[lo,hi];}
+// pairs of same-character variants that can't coexist on a team
+const DUP=[];for(const n in idsByName){const ids=idsByName[n];for(let a=0;a<ids.length;a++)for(let b=a+1;b<ids.length;b++)DUP.push([maskOf(ids[a]),maskOf(ids[b])]);}
+H.forEach(h=>{h.pm=h.tus.map(t=>maskOfName(t.partner));
+  h.uLo=0;h.uHi=0;h.pm.forEach(m=>{h.uLo=(h.uLo|m[0])>>>0;h.uHi=(h.uHi|m[1])>>>0;});});
+// Avatar images: drop files into ./avatars named after the in-game hero name
+// with spaces/ampersands collapsed to underscores, capitalization preserved
+// (The_Punisher, Jeff_the_Land_Shark, Cloak_Dagger, Star-Lord). Three tiers:
+//   normal  Hero_Icon_<Name>.webp              — no enhanced team-up available
+//   lord    Lord_Icon_<Name>.webp              — enhanced available, not the active pick
+//   champ   Champion_Icon_<Name>_Animated.webp — enhanced AND activated (animated)
+// All files are .webp (animated webp works for champ); to accept other
+// formats, add extensions to AVI_EXTS below.
+// Fallback walks down tiers: champ -> lord -> normal -> text name.
+// Misses are cached and only requested once per session.
+// Escape for interpolation into innerHTML/attributes. Current data contains no
+// unsafe characters, but contributor edits to RAW go through this safely.
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function slug(n){return n.toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"");}
+const AVI_EXTS=["webp"]; // icon pack is all-webp; add "png","gif" here if ever needed
+const AVI_NAMES={
+  champ:n=>[`Champion_Icon_${n}_Animated`,`Lord_Icon_${n}`,`Hero_Icon_${n}`],
+  lord:n=>[`Lord_Icon_${n}`,`Hero_Icon_${n}`],
+  normal:n=>[`Hero_Icon_${n}`]
+};
+const AVI_MISSING=new Set();
+const AVI_OK=new Set(); // paths that have loaded before: pre-marked .ok on re-render (no flicker)
+function aviOK(el){el.classList.add("ok");AVI_OK.add(el.dataset.path);}
+function aviFail(el){
+  AVI_MISSING.add(el.dataset.path);
+  const rest=(el.dataset.alt||"").split(",").filter(Boolean);
+  if(rest.length){el.dataset.path=rest[0];el.dataset.alt=rest.slice(1).join(",");el.src=rest[0];}
+  else el.remove();
+}
+function aviImg(name,tier,cls){
+  const n=name.replace(/[ &]+/g,"_"),c=[];
+  for(const base of AVI_NAMES[tier||"normal"](n))for(const e of AVI_EXTS)c.push(`avatars/${base}.${e}`);
+  const left=c.filter(p=>!AVI_MISSING.has(p));
+  if(!left.length)return"";
+  const known=AVI_OK.has(left[0]);
+  return `<img class="avi${known?" ok":""}${cls?" "+cls:""}" src="${left[0]}" data-path="${left[0]}"${left.length>1?` data-alt="${left.slice(1).join(",")}"`:""} alt="" onload="aviOK(this)" onerror="aviFail(this)">`;
+}
+
+/* ================= STATE ================= */
+let slots=[null,null,null,null,null,null]; // {id, lock, sel:-1|0|1}
+const $=q=>document.querySelector(q);
+
+function teamMask(){let lo=0,hi=0;for(const s of slots)if(s){const[a,b]=maskOf(s.id);lo=(lo|a)>>>0;hi=(hi|b)>>>0;}return[lo,hi];}
+function partnerIn(h,k,lo,hi){if(!h.tus[k])return false;const[a,b]=h.pm[k];return((a&lo)|(b&hi))!==0;}
+function equipped(s,lo,hi){ // returns index of equipped tu, or -1 if hero has none
+  const h=H[s.id]; if(!h.tus.length)return -1;
+  if(s.sel>=0)return s.sel;
+  if(partnerIn(h,0,lo,hi))return 0;
+  if(partnerIn(h,1,lo,hi))return 1;
+  return 0;
+}
+
+/* ================= RENDER ================= */
+const openRoles={[V]:true,[D]:true,[S]:true};
+function renderRoster(){
+  const el=$("#rosterBody");el.innerHTML="";
+  const filled=slots.filter(Boolean);
+  const inTeam=new Set(filled.map(s=>H[s.id].name));
+  const[lo,hi]=teamMask();
+  // partners wanted by slotted heroes: equipped loadout (solid) vs their other loadout (hollow)
+  const wantedEq={},wantedAlt={};
+  for(const s of filled){
+    const h=H[s.id],eq=equipped(s,lo,hi);
+    if(eq<0)continue;
+    h.tus.forEach((t,k)=>{
+      const m=(k===eq?wantedEq:wantedAlt);
+      (m[t.partner]=m[t.partner]||[]).push(h.name);
+    });
+  }
+  for(const role of ROLES){
+    const hs=H.filter(h=>h.role===role).sort((a,b)=>a.name.localeCompare(b.name));
+    const open=openRoles[role];
+    const head=document.createElement("button");head.type="button";
+    head.className="rolehead";head.style.color=RC[role];
+    head.setAttribute("aria-expanded",String(open));
+    head.innerHTML=`<span class="arrow ${open?"open":""}">▸</span>${role}s`;
+    head.onclick=()=>{openRoles[role]=!openRoles[role];renderRoster();};
+    el.appendChild(head);
+    if(!open)continue;
+    const g=document.createElement("div");g.className="rgrid";
+    for(const h of hs){
+      const slotted=inTeam.has(h.name);
+      // gain = this hero's own loadout would go enhanced (their partner is slotted)
+      // grant = a slotted hero's equipped loadout wants this hero (solid dot)
+      // grant-alt = a slotted hero's OTHER loadout wants this hero (hollow ring)
+      const gainsFrom=slotted?[]:h.tus.filter(t=>inTeam.has(t.partner)).map(t=>t.partner);
+      const grantsTo=(!slotted&&wantedEq[h.name])?wantedEq[h.name]:[];
+      const grantsAlt=(!slotted&&wantedAlt[h.name])?wantedAlt[h.name]:[];
+      const altOnly=!grantsTo.length&&grantsAlt.length>0;
+      const t=document.createElement("button");t.type="button";
+      t.className="htile"+(slotted?" slotted":"")+(gainsFrom.length?" gain":"")+(grantsTo.length?" grant":"")+(altOnly?" grantalt":"");
+      t.style.setProperty("--rc",RC[role]);
+      let tip=h.tus.length?h.tus.map(x=>`${x.name} (${x.partner})`).join("  ·  "):"Team-up loadouts TBD (mid-season hero)";
+      const lines=[];
+      if(gainsFrom.length)lines.push(`Gains enhanced from: ${[...new Set(gainsFrom)].join(", ")}`);
+      if(grantsTo.length)lines.push(`Grants enhanced to: ${[...new Set(grantsTo)].join(", ")}`);
+      if(grantsAlt.length)lines.push(`Grants if they swap loadouts: ${[...new Set(grantsAlt)].join(", ")}`);
+      if(lines.length)tip=lines.join("\n")+"\n"+tip;
+      t.title=tip;
+      t.setAttribute("aria-label",`${h.name}, ${role}${slotted?", on team":""}. ${lines.join(". ")}`);
+      let dots="";
+      if(gainsFrom.length)dots+=`<span class="hdot g"></span>`;
+      if(grantsTo.length)dots+=`<span class="hdot b"></span>`;
+      else if(grantsAlt.length)dots+=`<span class="hdot r"></span>`;
+      t.innerHTML=`${dots?`<span class="hdots">${dots}</span>`:""}${aviImg(h.name,"normal")}<span class="hname">${esc(h.name)}</span>`;
+      t.onclick=()=>toggleHero(h.id);
+      t.draggable=true;
+      t.addEventListener("dragstart",e=>{e.dataTransfer.setData("text/plain",String(h.id));e.dataTransfer.effectAllowed="copy";});
+      g.appendChild(t);
+    }
+    el.appendChild(g);
+  }
+}
+
+function placeHero(id,slotIndex){
+  // one copy of a character per team: remove any same-name slot first
+  const nm=H[id].name;
+  const dupI=slots.findIndex(s=>s&&H[s.id].name===nm);
+  if(dupI>=0&&dupI!==slotIndex)slots[dupI]=null;
+  slots[slotIndex]={id,lock:false,sel:-1};
+  renderAll();
+}
+function toggleHero(id){
+  const nm=H[id].name;
+  const i=slots.findIndex(s=>s&&H[s.id].name===nm);
+  if(i>=0){slots[i]=null;renderAll();return;}
+  const e=slots.findIndex(s=>!s);
+  if(e<0)return flashStatus("Team is full — remove someone first.");
+  placeHero(id,e);
+}
+
+function renderSlots(){
+  const wrap=$("#slots");wrap.innerHTML="";
+  const[lo,hi]=teamMask();
+  slots.forEach((s,i)=>{
+    const d=document.createElement("div");
+    d.dataset.slot=i;
+    // drop target behavior for every slot, filled or not
+    d.addEventListener("dragover",e=>{e.preventDefault();e.dataTransfer.dropEffect="copy";d.classList.add("dragover");});
+    d.addEventListener("dragleave",()=>d.classList.remove("dragover"));
+    d.addEventListener("drop",e=>{
+      e.preventDefault();d.classList.remove("dragover");
+      const id=parseInt(e.dataTransfer.getData("text/plain"),10);
+      if(!Number.isNaN(id)&&H[id])placeHero(id,i);
+    });
+    if(!s){d.className="slot";d.innerHTML=`<span>drop hero here</span>`;wrap.appendChild(d);return;}
+    const h=H[s.id],eq=equipped(s,lo,hi);
+    const isEnh=eq>=0&&partnerIn(h,eq,lo,hi);
+    const anyIn=h.tus.some((t,k)=>partnerIn(h,k,lo,hi));
+    const heroTier=isEnh?"champ":(anyIn?"lord":"normal");
+    d.className="slot filled"+(isEnh?" enh":"");d.style.setProperty("--rc",RC[h.role]);
+    let pHtml="";
+    if(!h.tus.length){pHtml=`<div class="partners"><span class="tbd">Loadouts TBD<br>partner-only for now</span></div>`;}
+    else{
+      pHtml=`<div class="partners">`+h.tus.map((t,k)=>{
+        const inT=partnerIn(h,k,lo,hi),isEq=k===eq;
+        const pTier=inT?(isEq?"champ":"lord"):"normal";
+        const pRole=H[idsByName[t.partner][0]].role;
+        return`<button type="button" class="ptile ${isEq?"eq":""}" data-k="${k}"
+          title="${esc(t.name)} — with ${esc(t.partner)}${inT?" (on team)":""}"
+          aria-pressed="${isEq}" style="--pc:${RC[pRole]}">
+          ${aviImg(t.partner,pTier)}<span class="pname">${esc(t.partner)}</span>
+        </button>`;
+      }).join("")+`</div>`;
+    }
+    d.innerHTML=`${aviImg(h.name,heroTier,"havi")}<span class="slotname">${esc(h.name)}</span><div class="scard">
+      <div class="head"><div class="role">${h.role}</div>
+      <div class="btns"><button type="button" class="lock ${s.lock?"on":""}" title="Lock into optimizer searches" aria-label="${s.lock?"Unlock":"Lock"} ${esc(h.name)}" aria-pressed="${s.lock}">${s.lock?"🔒":"🔓"}</button><button type="button" class="rm" title="Remove" aria-label="Remove ${esc(h.name)}">✕</button></div></div>
+      ${pHtml}</div>`;
+    d.querySelector(".rm").onclick=()=>{slots[i]=null;renderAll();};
+    d.querySelector(".lock").onclick=()=>{s.lock=!s.lock;renderAll();};
+    d.querySelectorAll(".ptile").forEach(b=>b.onclick=()=>{
+      const k=+b.dataset.k; s.sel=(s.sel===k?-1:k); renderAll();
+    });
+    wrap.appendChild(d);
+  });
+  requestAnimationFrame(drawLinks);
+}
+
+function drawLinks(){
+  const svg=$("#linkSvg"),wrap=$(".slotwrap");
+  svg.innerHTML="";
+  const wr=wrap.getBoundingClientRect();
+  const[lo,hi]=teamMask();
+  const pos={};
+  document.querySelectorAll(".slot.filled").forEach(el=>{
+    const r=el.getBoundingClientRect();
+    pos[slots[+el.dataset.slot].id]=[r.left-wr.left+r.width/2,r.top-wr.top+r.height/2];
+  });
+  const drawn=new Set();
+  slots.forEach(s=>{
+    if(!s)return;const h=H[s.id];const eq=equipped(s,lo,hi);
+    if(eq<0||!partnerIn(h,eq,lo,hi))return;
+    const pid=(idsByName[h.tus[eq].partner]||[]).find(x=>pos[x]!=null);
+    if(pid==null||pos[h.id]==null)return;
+    const key=Math.min(h.id,pid)+"-"+Math.max(h.id,pid);
+    if(drawn.has(key))return;drawn.add(key);
+    const l=document.createElementNS("http://www.w3.org/2000/svg","line");
+    const[a,b]=pos[h.id],[c,e]=pos[pid];
+    l.setAttribute("x1",a);l.setAttribute("y1",b);l.setAttribute("x2",c);l.setAttribute("y2",e);
+    svg.appendChild(l);
+  });
+}
+
+const LEGEND_HTML=`<div class="legend">
+  <span><i style="background:var(--syn);box-shadow:0 0 0 2px rgba(10,13,26,.9),0 0 5px var(--syn-glow)"></i>gains enhanced</span>
+  <span><i style="background:var(--grant);box-shadow:0 0 0 2px rgba(10,13,26,.9)"></i>grants enhanced (currently selected)</span>
+  <span><i style="background:rgba(10,13,26,.55);border:2.5px solid var(--grant);box-shadow:0 0 0 2px rgba(10,13,26,.9)"></i>grants enhanced (alternate team-up)</span>
+</div>`;
+const HELP_HTML=`<div class="rhelp">${LEGEND_HTML}<p class="note">🔒 keeps a hero (and their selected team-up) in Find Teams · ✕ removes them</p></div>`;
+function renderReadout(){
+  const el=$("#readout");
+  const filled=slots.filter(Boolean);
+  if(!filled.length){el.innerHTML=`<div class="empty">Slot heroes to see their team-up loadouts. Each hero card shows its two partners as icon buttons — click one to equip that loadout. Highlights in the roster show how each hero connects to your team:</div>${HELP_HTML}`;return;}
+  const[lo,hi]=teamMask();let html="";
+  for(const s of filled){
+    const h=H[s.id],eq=equipped(s,lo,hi);
+    if(eq<0){html+=`<div class="item"><div class="l1"><span class="hn" style="--rc:${RC[h.role]}">${esc(h.name)}</span><span class="pn">loadouts TBD — counts as a partner only</span></div></div>`;continue;}
+    const t=h.tus[eq],inT=partnerIn(h,eq,lo,hi);
+    html+=`<div class="item"><div class="l1">
+      <span class="hn" style="--rc:${RC[h.role]}">${esc(h.name)}</span>
+      <span class="tn">${esc(t.name)}</span>${inT?`<span class="pn">w/ ${esc(t.partner)}</span>`:""}
+      <span class="badge ${inT?"enh":"base"}">${inT?"ENHANCED":"BASE"}</span></div>
+      <div class="desc">${esc(t.base)}</div>
+      ${inT?`<div class="desc"><b>▲ </b>${esc(t.enh)}</div>`:""}
+    </div>`;
+  }
+  el.innerHTML=html+HELP_HTML;
+}
+
+function renderScore(){
+  const[lo,hi]=teamMask();
+  let enh=0,n=0;
+  for(const s of slots){if(!s)continue;n++;const h=H[s.id];
+    const eq=equipped(s,lo,hi);
+    if(eq>=0&&partnerIn(h,eq,lo,hi))enh++;
+  }
+  $("#enhCount").textContent=enh;$("#slotCount").textContent=n;
+}
+
+function lockedCounts(){const lc={[V]:0,[D]:0,[S]:0};slots.forEach(s=>{if(s&&s.lock)lc[H[s.id].role]++;});return lc;}
+function compFits(p,lc){return p[0]>=lc[V]&&p[1]>=lc[D]&&p[2]>=lc[S];}
+let searching=false,scanning=false;
+function renderSearchInfo(){
+  const el=$("#lockInfo");
+  const lc=lockedCounts(),lockedN=lc[V]+lc[D]+lc[S];
+  const ok=compFits([comp.v,comp.d,comp.s],lc);
+  let html="";
+  if(lockedN>0)html+=`🔒 ${lockedN} locked hero${lockedN===1?"":"es"} will be kept in searches.`;
+  if(!ok)html+=`${html?"<br>":""}<span class="warn">⚠ Locked heroes don't fit the selected ${comp.v}-${comp.d}-${comp.s} comp.</span>`;
+  el.innerHTML=html;
+  $("#findBtn").disabled=(searching||scanning)?true:!ok;
+}
+
+function renderAll(){renderRoster();renderSlots();renderReadout();renderScore();renderComp();encodeHash();}
+window.addEventListener("resize",()=>requestAnimationFrame(drawLinks));
+$("#clearBtn").onclick=()=>{slots=[null,null,null,null,null,null];renderAll();};
+
+/* ================= OPTIMIZER ================= */
+// Rivals tracker comps by win rate (all ranks), plus 5-0-1 for the memes
+const PRESETS=[[2,2,2],[1,3,2],[2,1,3],[1,2,3],[3,1,2],[3,0,3],[0,4,2],[2,3,1],[3,2,1],[0,3,3],[2,0,4],[1,1,4],[1,4,1],[0,2,4],[0,5,1],[5,0,1]];
+let comp={v:2,d:2,s:2};
+const presetMax={}; // key -> best score found by scan
+
+function presetKey(p){return p.join("-");}
+// Badges describe "best possible" under the locks/pins active at scan time.
+// If those constraints change, stale badges are dropped rather than mislead.
+function constraintSig(){
+  const[lo,hi]=teamMask();
+  return slots.filter(s=>s&&s.lock).map(s=>s.id+":"+equipped(s,lo,hi)).sort().join("|");
+}
+let badgeSig=null;
+function renderPresets(){
+  const el=$("#presets");el.innerHTML="";
+  if(badgeSig!==null&&badgeSig!==constraintSig()){for(const k in presetMax)delete presetMax[k];badgeSig=null;}
+  const lc=lockedCounts();
+  PRESETS.forEach(p=>{
+    const b=document.createElement("button");b.type="button";
+    b.className="preset"+(comp.v===p[0]&&comp.d===p[1]&&comp.s===p[2]?" sel":"");
+    b.disabled=!compFits(p,lc);
+    if(b.disabled)b.title="Locked heroes don't fit this comp";
+    b.innerHTML=`${p.join("-")}${presetMax[presetKey(p)]!=null?`<span class="max">${presetMax[presetKey(p)]}/6</span>`:""}`;
+    b.onclick=()=>{comp={v:p[0],d:p[1],s:p[2]};renderComp();};
+    el.appendChild(b);
+  });
+}
+function renderComp(){$("#cv").textContent=comp.v;$("#cd").textContent=comp.d;$("#cs").textContent=comp.s;renderPresets();renderSearchInfo();}
+document.querySelectorAll(".step .pm button").forEach(b=>b.onclick=()=>{
+  const k=b.dataset.k,d=+b.dataset.d,total=comp.v+comp.d+comp.s;
+  if(d>0&&total>=6)return flashStatus("Comp already totals 6.");
+  comp[k]=Math.max(0,Math.min(6,comp[k]+d));renderComp();
+});
+let statusTimer=null;
+function flashStatus(m){
+  $("#status").textContent=m;
+  clearTimeout(statusTimer);
+  if(m)statusTimer=setTimeout(()=>{$("#status").textContent="";},4000);
+}
+
+function combos(pool,k,cb,acc,lo,hi,start){
+  if(k===0){cb(acc,lo,hi);return;}
+  for(let i=start;i<=pool.length-k;i++){
+    const id=pool[i],[a,b]=maskOf(id);
+    acc.push(id);combos(pool,k-1,cb,acc,(lo|a)>>>0,(hi|b)>>>0,i+1);acc.pop();
+  }
+}
+// Note: within a tier, ties keep enumeration (roster-definition) order —
+// "top" among equal-scoring teams is arbitrary, then diversity-filtered.
+function eOf(arr,lo,hi){let e=0;for(let i=0;i<arr.length;i++){const h=H[arr[i]];if(((h.uLo&lo)|(h.uHi&hi))!==0)e++;}return e;}
+function runSearch(want,cb){
+  // want = [v,d,s]; respect locked heroes.
+  // Teams are bucketed by enhanced count; teams satisfying every locked hero's
+  // pinned loadout are flagged (dot) and float to the top of their tier.
+  // Below the best tier, only pin-satisfying teams are worth showing.
+  const lockedSlots=slots.filter(s=>s&&s.lock);
+  const locked=lockedSlots.map(s=>s.id);
+  // WYSIWYG: each locked hero's constraint is whichever team-up is currently
+  // shown as selected on their card (explicitly clicked or auto-equipped).
+  const[cLo,cHi]=teamMask();
+  const pins=lockedSlots.filter(s=>H[s.id].tus.length).map(s=>H[s.id].pm[equipped(s,cLo,cHi)]);
+  const lockedByRole={[V]:0,[D]:0,[S]:0};
+  locked.forEach(id=>lockedByRole[H[id].role]++);
+  const need=[want[0]-lockedByRole[V],want[1]-lockedByRole[D],want[2]-lockedByRole[S]];
+  if(need.some(n=>n<0))return cb(null,"Locked heroes exceed that comp's role counts — unlock someone or change the comp.");
+  let bLo=0,bHi=0;locked.forEach(id=>{const m=maskOf(id);bLo=(bLo|m[0])>>>0;bHi=(bHi|m[1])>>>0;});
+  const pools=ROLES.map(r=>H.filter(h=>h.role===r&&!locked.includes(h.id)).map(h=>h.id));
+  const CAP=200;
+  const tiers=Array.from({length:7},()=>({full:[],part:[],plain:[]}));
+  combos(pools[0],need[0],(v1,l1,h1)=>{
+    combos(pools[1],need[1],(v2,l2,h2)=>{
+      combos(pools[2],need[2],(v3,lo,hi)=>{
+        for(let x=0;x<DUP.length;x++){const p=DUP[x];
+          if((((p[0][0]&lo)|(p[0][1]&hi))!==0)&&(((p[1][0]&lo)|(p[1][1]&hi))!==0))return;}
+        const e=eOf(locked,lo,hi)+eOf(v1,lo,hi)+eOf(v2,lo,hi)+eOf(v3,lo,hi);
+        let sat=0;
+        for(let x=0;x<pins.length;x++){const m=pins[x];if(((m[0]&lo)|(m[1]&hi))!==0)sat++;}
+        const t=tiers[e];
+        const bucket=(pins.length&&sat===pins.length)?t.full:(sat>0?t.part:t.plain);
+        if(bucket.length<CAP)bucket.push(locked.concat(v1,v2,v3));
+      },[],l2,h2,0);
+    },[],l1,h1,0);
+  },[],bLo,bHi,0);
+  let eBest=-1;for(let e=6;e>=0;e--){const t=tiers[e];if(t.full.length||t.part.length||t.plain.length){eBest=e;break;}}
+  if(eBest<0)return cb({best:0,picks:[]},null);
+  const picks=[];
+  const overlaps=ids=>picks.some(p=>{const s=new Set(p.ids);return ids.filter(id=>s.has(id)).length>=5;});
+  const addFrom=(arr,e,mark,limit)=>{let n=0;for(const ids of arr){if(n>=limit)break;if(overlaps(ids))continue;picks.push({e,ids,pinned:mark});n++;}};
+  // Best tier: full pin satisfaction first, then partial, then the rest
+  addFrom(tiers[eBest].full,eBest,"full",12);
+  addFrom(tiers[eBest].part,eBest,"part",6);
+  addFrom(tiers[eBest].plain,eBest,false,12);
+  // Lower tiers: pin-satisfying teams only (full first).
+  // Plain lower-tier teams are omitted: they're dominated by plain best-tier
+  // teams on every axis.
+  if(pins.length){
+    for(let e=eBest-1;e>=Math.max(0,eBest-2);e--){
+      const before=picks.length;
+      addFrom(tiers[e].full,e,"full",8);
+      addFrom(tiers[e].part,e,"part",Math.max(0,8-(picks.length-before)));
+    }
+  }
+  cb({best:eBest,picks},null);
+}
+
+let lastPicks=[];
+const PAGE=8;
+function renderResults(page){
+  const el=$("#results");el.innerHTML="";
+  const pages=Math.ceil(lastPicks.length/PAGE);
+  if(pages>1){
+    const row=document.createElement("div");row.className="pips";
+    for(let i=0;i<pages;i++){
+      const b=document.createElement("button");b.type="button";
+      b.className="pip"+(i===page?" on":"");
+      b.title=`Page ${i+1}`;b.setAttribute("aria-label",`Results page ${i+1}`);
+      b.onclick=()=>renderResults(i);
+      row.appendChild(b);
+    }
+    el.appendChild(row);
+  }
+  const start=page*PAGE;
+  lastPicks.slice(start,start+PAGE).forEach(p=>{
+    const d=document.createElement("button");d.type="button";d.className="res";
+    const names=p.ids.map(id=>`<i class="${H[id].role[0].toLowerCase()}">${esc(H[id].name)}</i>`).join(" · ");
+    const pinNote=p.pinned==="full"?"All locked heroes' selected team-ups enhanced. ":p.pinned==="part"?"Some locked heroes' selected team-ups enhanced. ":"";
+    d.setAttribute("aria-label",`Load team: ${p.ids.map(id=>H[id].name).join(", ")}. ${p.e} of 6 enhanced. ${pinNote}`);
+    d.innerHTML=`${p.pinned?`<span class="pindot ${p.pinned==="full"?"full":"ring"}" title="${pinNote.trim()}"></span>`:""}<span class="sc">${p.e}/6 enhanced</span><span class="team">${names}</span>`;
+    d.onclick=()=>{loadTeam(p.ids);};
+    el.appendChild(d);
+  });
+}
+$("#findBtn").onclick=()=>{
+  const want=[comp.v,comp.d,comp.s];
+  if(want[0]+want[1]+want[2]!==6)return flashStatus("Comp must total 6 (currently "+(want[0]+want[1]+want[2])+").");
+  flashStatus("");
+  const btn=$("#findBtn");searching=true;btn.disabled=true;btn.textContent="Searching…";$("#scanBtn").disabled=true;
+  setTimeout(()=>{
+    runSearch(want,(res,err)=>{
+      searching=false;btn.textContent="Find Teams";$("#scanBtn").disabled=false;renderSearchInfo();
+      if(err)return flashStatus(err);
+      presetMax[want.join("-")]=res.best;badgeSig=constraintSig();renderPresets();
+      lastPicks=res.picks;
+      renderResults(0);
+      if(!res.picks.length)$("#results").innerHTML=`<div class="note" style="margin-top:8px">No teams found for that comp.</div>`;
+    });
+  },30);
+};
+
+function loadTeam(ids){
+  const lockedKeep=slots.filter(s=>s&&s.lock&&ids.includes(s.id));
+  const rest=ids.filter(id=>!lockedKeep.some(s=>s.id===id)).map(id=>({id,lock:false,sel:-1}));
+  slots=lockedKeep.concat(rest);
+  while(slots.length<6)slots.push(null);
+  renderAll();
+  const reduce=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  window.scrollTo({top:0,behavior:reduce?"auto":"smooth"});
+}
+
+$("#scanBtn").onclick=()=>{
+  const btn=$("#scanBtn");scanning=true;btn.disabled=true;renderSearchInfo();flashStatus("");let i=0;
+  const step=()=>{
+    if(i>=PRESETS.length){scanning=false;btn.disabled=false;btn.textContent="Scan Presets";renderSearchInfo();return;}
+    btn.textContent=`Scanning ${i+1}/${PRESETS.length}…`;
+    setTimeout(()=>{
+      runSearch(PRESETS[i],(res,err)=>{
+        if(!err&&res){presetMax[presetKey(PRESETS[i])]=res.best;badgeSig=constraintSig();renderPresets();}
+        i++;step();
+      });
+    },30);
+  };
+  step();
+};
+
+/* ================= SHAREABLE URL STATE ================= */
+// Team + comp live in the URL hash so builds can be shared as links.
+// Format: #t=<slug>.<r>[L][sel],...&c=v-d-s  e.g. #t=thor.vL0,hela.d&c=2-2-2
+// r = role initial (needed because Deadpool exists in all three roles).
+const BY_SLUGROLE={};H.forEach(h=>{BY_SLUGROLE[slug(h.name)+"."+h.role[0].toLowerCase()]=h.id;});
+function encodeHash(){
+  const t=slots.filter(Boolean).map(s=>{
+    const h=H[s.id];
+    return slug(h.name)+"."+h.role[0].toLowerCase()+(s.lock?"L":"")+(s.sel>=0?s.sel:"");
+  }).join(",");
+  const c=`${comp.v}-${comp.d}-${comp.s}`;
+  const parts=[];
+  if(t)parts.push("t="+t);
+  if(c!=="2-2-2")parts.push("c="+c);
+  const hash=parts.length?"#"+parts.join("&"):"";
+  try{history.replaceState(null,"",hash||location.pathname+location.search);}catch(e){}
+}
+function applyHash(){
+  const raw=location.hash.slice(1);
+  if(!raw)return;
+  for(const part of raw.split("&")){
+    const[k,v]=part.split("=");
+    if(k==="t"&&v){
+      const next=[null,null,null,null,null,null];let n=0;
+      for(const entry of v.split(",")){
+        if(n>=6)break;
+        const m=/^([a-z0-9_]+)\.([vds])(L?)([01]?)$/.exec(entry);
+        if(!m)continue;
+        const id=BY_SLUGROLE[m[1]+"."+m[2]];
+        if(id==null)continue;
+        if(next.some(s=>s&&H[s.id].name===H[id].name))continue; // one copy per character
+        next[n++]={id,lock:m[3]==="L",sel:m[4]===""?-1:+m[4]};
+      }
+      slots=next;
+    }
+    if(k==="c"&&v){
+      const c=v.split("-").map(Number);
+      if(c.length===3&&c.every(x=>Number.isInteger(x)&&x>=0&&x<=6))comp={v:c[0],d:c[1],s:c[2]};
+    }
+  }
+}
+window.addEventListener("hashchange",()=>{applyHash();renderAll();});
+
+applyHash();
+renderAll();
+document.fonts&&document.fonts.ready.then(()=>drawLinks());
+</script>
+</body>
+</html>
